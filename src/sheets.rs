@@ -160,6 +160,29 @@ impl SpriteSheet {
         }
     }
 
+    /// Builds a sheet by hand for tests in other modules: per-frame durations
+    /// (ms) and forward tags as `(name, from, to)`.
+    #[cfg(test)]
+    pub fn for_test(durations: Vec<u32>, tags: &[(&str, usize, usize)]) -> Self {
+        Self {
+            image: Handle::default(),
+            layout: Handle::default(),
+            durations,
+            tags: tags
+                .iter()
+                .map(|&(name, from, to)| {
+                    let tag = TagJson {
+                        name: name.to_string(),
+                        from,
+                        to,
+                        direction: "forward".to_string(),
+                    };
+                    (name.to_string(), tag)
+                })
+                .collect(),
+        }
+    }
+
     /// How long a frame is shown, in seconds.
     pub fn frame_secs(&self, frame: usize) -> f32 {
         self.durations[frame] as f32 / 1000.0
@@ -334,6 +357,13 @@ mod tests {
         let data: SheetJson = serde_json::from_str(&json).unwrap();
         assert!(!data.frames.is_empty());
         assert_eq!(data.meta.image, "placeholder.png");
-        assert!(data.meta.frame_tags.iter().any(|t| t.name == "idle"));
+        // Unit movement plays these tags; a missing one would silently fall
+        // back to "all frames" (see `unknown_tag_plays_all_frames`).
+        for tag in ["idle", "start_move", "move", "end_move"] {
+            assert!(
+                data.meta.frame_tags.iter().any(|t| t.name == tag),
+                "missing tag {tag}"
+            );
+        }
     }
 }
