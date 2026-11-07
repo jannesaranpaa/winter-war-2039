@@ -1,4 +1,4 @@
-//! # Valley
+//! # Winter War 2039
 //!
 //! An isometric 2D game build with Bevy. The program is organised as a set of
 //! plugins, each owning a concern. This file wires them together.
