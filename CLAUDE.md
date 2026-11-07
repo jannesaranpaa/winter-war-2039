@@ -64,6 +64,8 @@ The code must read like an explanation of the program, not a list of statements.
 - **The user reviews every PR.** After opening one, stop and wait. Merge only once the
   user has said so for that PR, using `gh pr merge --squash` with the PR title as the
   commit title. Approval of one PR does not cover the next.
+- **After a merge, delete the branch** locally and on the remote (`git branch -D <branch>`,
+  `git push origin --delete <branch>`), then switch to `main` and pull. Always do this.
 - **Never merge into `main`, push `main`, or force-push unless explicitly asked.**
   Committing on a feature branch is fine without asking; pushing a branch and opening a
   PR is fine when work is ready, but merging is the user's call.
