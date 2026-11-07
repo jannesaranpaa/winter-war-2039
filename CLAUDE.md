@@ -61,6 +61,9 @@ The code must read like an explanation of the program, not a list of statements.
   title is itself a conventional commit and summarizes the whole branch.
 - Open PRs with `gh pr create`; the description says what changed and why, and ends with
   the harness's PR attribution line.
+- **The user reviews every PR.** After opening one, stop and wait. Merge only once the
+  user has said so for that PR, using `gh pr merge --squash` with the PR title as the
+  commit title. Approval of one PR does not cover the next.
 - **Never merge into `main`, push `main`, or force-push unless explicitly asked.**
   Committing on a feature branch is fine without asking; pushing a branch and opening a
   PR is fine when work is ready, but merging is the user's call.
