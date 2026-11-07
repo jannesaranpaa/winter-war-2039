@@ -114,17 +114,14 @@ pub fn world_to_grid(world: Vec2) -> Vec2 {
     Vec2::new((u + v) / 2.0, (v - u) / 2.0)
 }
 
+/// Selects only entities whose position or offset changed since last frame.
+/// Newly spawned entities count as changed, so everything is placed once, and
+/// then the 64 static tiles cost nothing: only moving things are touched again.
+type NeedsProjection = Or<(Changed<GridPos>, Changed<ScreenOffset>)>;
+
 /// The system that keeps `Transform` in sync with `GridPos`.
-///
-/// The filter `Or<(Changed<..>, ..)>` makes Bevy hand us only entities whose
-/// position or offset changed since last frame. Newly spawned entities count as
-/// changed, so everything is placed once, and then the 64 static tiles cost
-/// nothing: only moving things are touched again.
 fn project_grid_entities(
-    mut q: Query<
-        (&GridPos, &mut Transform, Option<&ScreenOffset>),
-        Or<(Changed<GridPos>, Changed<ScreenOffset>)>,
-    >,
+    mut q: Query<(&GridPos, &mut Transform, Option<&ScreenOffset>), NeedsProjection>,
 ) {
     for (pos, mut tf, offset) in &mut q {
         // Not every entity has an offset (tiles do not); treat missing as zero.

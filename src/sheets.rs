@@ -37,10 +37,7 @@ impl Plugin for SheetsPlugin {
             // issued by the time anything else starts.
             .add_systems(PreStartup, load_sheets)
             // While `Loading`, check every frame whether we are done yet.
-            .add_systems(
-                Update,
-                finish_loading.run_if(in_state(AppState::Loading)),
-            );
+            .add_systems(Update, finish_loading.run_if(in_state(AppState::Loading)));
     }
 }
 
