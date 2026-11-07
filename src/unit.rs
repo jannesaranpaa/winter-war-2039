@@ -8,6 +8,7 @@ use bevy::prelude::*;
 
 use crate::anim::Animator;
 use crate::iso::{GridPos, ScreenOffset};
+use crate::movement::Mover;
 use crate::sheets::{Sheets, SpriteSheet};
 use crate::state::AppState;
 
@@ -42,6 +43,8 @@ pub fn spawn_unit(
 
     commands.spawn((
         Unit,
+        // Lets it walk to a clicked cell; see `movement.rs`.
+        Mover::default(),
         // Where it stands. The projection turns this into a screen position.
         GridPos(pos),
         // The art is taller than a tile: lift it 8px so the feet are on the

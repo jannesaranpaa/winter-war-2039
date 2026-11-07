@@ -10,6 +10,7 @@
 //! - [`world`]  — the camera and the static tile map.
 //! - [`cursor`] — the highlight that follows the mouse over grid cells.
 //! - [`mod@unit`] — characters standing on the grid.
+//! - [`movement`] — click a cell and the unit walks there.
 //!
 //! Data flows in one direction. Gameplay code decides *where* things are by
 //! writing a `GridPos`; `iso` turns that into a `Transform`; Bevy draws it.
@@ -18,6 +19,7 @@
 mod anim;
 mod cursor;
 mod iso;
+mod movement;
 mod sheets;
 mod state;
 mod unit;
@@ -41,6 +43,7 @@ fn main() {
             world::WorldPlugin,
             cursor::CursorPlugin,
             unit::UnitPlugin,
+            movement::MovementPlugin,
         ))
         .run();
 }

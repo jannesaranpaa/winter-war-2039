@@ -36,7 +36,35 @@ fn spawn_cursor(mut commands: Commands, asset_server: Res<AssetServer>) {
     ));
 }
 
-/// Each frame: mouse position -> world position -> grid cell -> move the cursor.
+/// Whether a (rounded) grid cell lies on the map. Shared by hover and click
+/// handling so both agree on what "on the map" means.
+pub fn cell_in_bounds(cell: Vec2) -> bool {
+    cell.x >= 0.0 && cell.y >= 0.0 && cell.x < GRID as f32 && cell.y < GRID as f32
+}
+
+/// The grid cell currently under the mouse, or `None` if the mouse is outside
+/// the window or the camera cannot project it. The cell may be off the map;
+/// check with [`cell_in_bounds`]. Shared by hovering and clicking.
+pub fn mouse_cell(
+    window: &Window,
+    camera: &Camera,
+    camera_transform: &GlobalTransform,
+) -> Option<Vec2> {
+    // Step 1: mouse position in window pixels. There is none while the mouse
+    // is outside the window.
+    let screen_pos = window.cursor_position()?;
+
+    // Step 2: undo the camera (position and zoom) to get a point in the world.
+    let world_pos = camera
+        .viewport_to_world_2d(camera_transform, screen_pos)
+        .ok()?;
+
+    // Step 3: undo the isometric projection to get a grid coordinate. Cells are
+    // centred on whole numbers, so rounding picks the cell the point is in.
+    Some(world_to_grid(world_pos).round())
+}
+
+/// Each frame: mouse position -> grid cell -> move the cursor.
 fn cursor_follow_mouse(
     // `Single` means "exactly one of these exists"; the system is skipped
     // otherwise. There is one window, one 2D camera, and one cursor.
@@ -47,23 +75,14 @@ fn cursor_follow_mouse(
     let (camera, camera_transform) = *camera;
     let (mut pos, mut vis) = cursor.into_inner();
 
-    // Step 1: mouse position in window pixels. There is none while the mouse
-    // is outside the window, in which case we leave the cursor where it is.
-    let Some(screen_pos) = window.cursor_position() else {
+    // Step 1: find the cell under the mouse. With the mouse outside the window
+    // there is none, and we leave the cursor where it is.
+    let Some(cell) = mouse_cell(&window, camera, camera_transform) else {
         return;
     };
+    let in_bounds = cell_in_bounds(cell);
 
-    // Step 2: undo the camera (position and zoom) to get a point in the world.
-    let Ok(world_pos) = camera.viewport_to_world_2d(camera_transform, screen_pos) else {
-        return;
-    };
-
-    // Step 3: undo the isometric projection to get a grid coordinate. Cells are
-    // centred on whole numbers, so rounding picks the cell the point is in.
-    let cell = world_to_grid(world_pos).round();
-    let in_bounds = cell.x >= 0.0 && cell.y >= 0.0 && cell.x < GRID as f32 && cell.y < GRID as f32;
-
-    // Step 4: move, but only if the mouse is over the map. `set_if_neq` writes
+    // Step 2: move, but only if the mouse is over the map. `set_if_neq` writes
     // only when the value really differs, so Bevy's change detection stays
     // quiet while the mouse moves within one cell, and the projection (which
     // reacts to changes) does no work.
