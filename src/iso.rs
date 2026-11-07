@@ -114,17 +114,14 @@ pub fn world_to_grid(world: Vec2) -> Vec2 {
     Vec2::new((u + v) / 2.0, (v - u) / 2.0)
 }
 
+/// Selects only entities whose position or offset changed since last frame.
+/// Newly spawned entities count as changed, so everything is placed once, and
+/// then the 64 static tiles cost nothing: only moving things are touched again.
+type NeedsProjection = Or<(Changed<GridPos>, Changed<ScreenOffset>)>;
+
 /// The system that keeps `Transform` in sync with `GridPos`.
-///
-/// The filter `Or<(Changed<..>, ..)>` makes Bevy hand us only entities whose
-/// position or offset changed since last frame. Newly spawned entities count as
-/// changed, so everything is placed once, and then the 64 static tiles cost
-/// nothing: only moving things are touched again.
 fn project_grid_entities(
-    mut q: Query<
-        (&GridPos, &mut Transform, Option<&ScreenOffset>),
-        Or<(Changed<GridPos>, Changed<ScreenOffset>)>,
-    >,
+    mut q: Query<(&GridPos, &mut Transform, Option<&ScreenOffset>), NeedsProjection>,
 ) {
     for (pos, mut tf, offset) in &mut q {
         // Not every entity has an offset (tiles do not); treat missing as zero.
@@ -136,5 +133,87 @@ fn project_grid_entities(
         world.y += dy;
         world.z += dz;
         tf.translation = world;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    //! The projection is pure maths, so it is tested without an `App`.
+    //! The properties that matter: picking inverts drawing, and depth orders
+    //! things the way the eye expects.
+
+    use super::*;
+
+    /// Picking must invert drawing. The sprite is placed at `grid_to_world`, but
+    /// the diamond we click is the *top face*, `TILE_FACE_OFFSET_Y` above the
+    /// image centre, so that is the point we feed to `world_to_grid`.
+    #[test]
+    fn picking_inverts_projection() {
+        for gx in -3..10 {
+            for gy in -3..10 {
+                let grid = Vec2::new(gx as f32, gy as f32);
+                let face = grid_to_world(grid).truncate() + Vec2::new(0.0, TILE_FACE_OFFSET_Y);
+                let back = world_to_grid(face);
+                assert!(back.abs_diff_eq(grid, 1e-4), "{grid} came back as {back}");
+            }
+        }
+    }
+
+    /// Rounding a point anywhere inside a tile's diamond must select that cell,
+    /// which is how the cursor chooses a cell. We test points near the diamond's
+    /// four corners (pulled slightly inward so they are unambiguously inside).
+    #[test]
+    fn points_inside_a_diamond_pick_its_cell() {
+        let grid = Vec2::new(4.0, 2.0);
+        let face = grid_to_world(grid).truncate() + Vec2::new(0.0, TILE_FACE_OFFSET_Y);
+        let (hw, hh) = (TILE_W / 2.0 * 0.9, TILE_H / 2.0 * 0.9);
+        for corner in [
+            Vec2::new(hw, 0.0),
+            Vec2::new(-hw, 0.0),
+            Vec2::new(0.0, hh),
+            Vec2::new(0.0, -hh),
+        ] {
+            assert_eq!(world_to_grid(face + corner).round(), grid);
+        }
+    }
+
+    /// One step along grid-x goes right and down; along grid-y, left and down.
+    #[test]
+    fn axes_point_the_isometric_way() {
+        let origin = grid_to_world(Vec2::ZERO);
+        let dx = grid_to_world(Vec2::X) - origin;
+        let dy = grid_to_world(Vec2::Y) - origin;
+        assert_eq!((dx.x, dx.y), (TILE_W / 2.0, -TILE_H / 2.0));
+        assert_eq!((dy.x, dy.y), (-TILE_W / 2.0, -TILE_H / 2.0));
+    }
+
+    /// Lower on screen means closer, so it must have a higher z.
+    #[test]
+    fn lower_on_screen_draws_on_top() {
+        let behind = grid_to_world(Vec2::new(2.0, 2.0)).z;
+        let in_front = grid_to_world(Vec2::new(3.0, 2.0)).z;
+        assert!(in_front > behind);
+    }
+
+    /// Y-sorting is continuous: a position halfway between two cells sorts
+    /// halfway between them, not snapped to either.
+    #[test]
+    fn depth_is_continuous_between_cells() {
+        let a = grid_to_world(Vec2::new(2.0, 2.0)).z;
+        let b = grid_to_world(Vec2::new(3.0, 2.0)).z;
+        let mid = grid_to_world(Vec2::new(2.5, 2.0)).z;
+        assert!(a < mid && mid < b);
+        assert!((mid - (a + b) / 2.0).abs() < 1e-6);
+    }
+
+    /// Layer biases (cursor 0.0002, unit 0.0005) must not lift an object over
+    /// the row in front of it; the row step is the safe upper bound.
+    #[test]
+    fn biases_stay_below_one_row_step() {
+        let row = grid_to_world(Vec2::new(1.0, 0.0)).z - grid_to_world(Vec2::ZERO).z;
+        assert!((row - 0.001).abs() < 1e-7, "row step is {row}");
+        for bias in [0.0002, 0.0005] {
+            assert!(bias < row);
+        }
     }
 }

@@ -37,10 +37,7 @@ impl Plugin for SheetsPlugin {
             // issued by the time anything else starts.
             .add_systems(PreStartup, load_sheets)
             // While `Loading`, check every frame whether we are done yet.
-            .add_systems(
-                Update,
-                finish_loading.run_if(in_state(AppState::Loading)),
-            );
+            .add_systems(Update, finish_loading.run_if(in_state(AppState::Loading)));
     }
 }
 
@@ -254,5 +251,89 @@ impl Sheets {
         self.by_name
             .get(name)
             .unwrap_or_else(|| panic!("sheet '{name}' not registered"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    //! Tag expansion and frame timing are pure data logic, so they are tested on a
+    //! hand-built sheet; no assets or `App` are involved.
+
+    use super::*;
+
+    /// A 6-frame sheet with one tag per direction, plus a distinct duration per
+    /// frame so timing mistakes would show.
+    fn sheet() -> SpriteSheet {
+        let tag = |name: &str, from, to, direction: &str| {
+            (
+                name.to_string(),
+                TagJson {
+                    name: name.to_string(),
+                    from,
+                    to,
+                    direction: direction.to_string(),
+                },
+            )
+        };
+        SpriteSheet {
+            image: Handle::default(),
+            layout: Handle::default(),
+            durations: vec![100, 200, 300, 400, 500, 600],
+            tags: HashMap::from([
+                tag("fwd", 1, 3, "forward"),
+                tag("rev", 1, 3, "reverse"),
+                tag("pp", 0, 3, "pingpong"),
+                tag("single", 4, 4, "forward"),
+                tag("single_pp", 4, 4, "pingpong"),
+            ]),
+        }
+    }
+
+    #[test]
+    fn forward_plays_the_range_in_order() {
+        assert_eq!(sheet().sequence("fwd"), [1, 2, 3]);
+    }
+
+    #[test]
+    fn reverse_plays_the_range_backwards() {
+        assert_eq!(sheet().sequence("rev"), [3, 2, 1]);
+    }
+
+    /// Both end frames appear once, so the loop does not stutter on them.
+    #[test]
+    fn pingpong_does_not_repeat_the_end_frames() {
+        assert_eq!(sheet().sequence("pp"), [0, 1, 2, 3, 2, 1]);
+    }
+
+    #[test]
+    fn single_frame_tags_work_in_every_direction() {
+        assert_eq!(sheet().sequence("single"), [4]);
+        assert_eq!(sheet().sequence("single_pp"), [4]);
+    }
+
+    /// An unknown tag falls back to the whole sheet instead of panicking.
+    #[test]
+    fn unknown_tag_plays_all_frames() {
+        assert_eq!(sheet().sequence("nope"), [0, 1, 2, 3, 4, 5]);
+    }
+
+    #[test]
+    fn durations_convert_from_milliseconds() {
+        assert!((sheet().frame_secs(2) - 0.3).abs() < 1e-6);
+    }
+
+    /// The real Aseprite export in `assets/` must parse with our structs, so a
+    /// format drift is caught here and not at game start.
+    #[test]
+    fn shipped_placeholder_json_parses() {
+        let json = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/assets/placeholder.json"
+        ))
+        .unwrap();
+        let data: SheetJson = serde_json::from_str(&json).unwrap();
+        assert!(!data.frames.is_empty());
+        assert_eq!(data.meta.image, "placeholder.png");
+        assert!(data.meta.frame_tags.iter().any(|t| t.name == "idle"));
     }
 }
